@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const userLimit = rateLimit.get(ip);
     if (userLimit && now < userLimit.reset && userLimit.count >= 15) {
       const mins = Math.ceil((userLimit.reset - now) / 60000);
-      return Response.json({ reply: `⚠️ 15 رسالة بالساعة، حاول بعد ${mins} دقيقة.` });
+      return Response.json({ reply: `وصلت للحد 15 رسالة، حاول بعد ${mins} دقيقة` });
     }
     if (!userLimit || now >= userLimit.reset) rateLimit.set(ip, {count: 0, reset: now + 3600000});
     rateLimit.get(ip)!.count++;
@@ -37,9 +37,10 @@ export async function POST(req: Request) {
           body: JSON.stringify({
             model,
             messages: [
-              { role: "system", content: "انت تيتان - اقوى وكيل هرمس 405B، ترد باللهجة العراقية" },
+              { role: "system", content: "انت تيتان - مساعد ذكي ودود. ترد بشكل طبيعي جداً، على طبيعة الشخص الي يحجي وياك. اذا حجه عراقي رد عراقي، اذا فصحى رد فصحى، اذا انكليزي رد انكليزي. كلامك طبيعي، بسيط، و helpful. لا تضيف رموز غريبة. انت صنعك عدنان الدراجي." },
               ...messages
-            ]
+            ],
+            temperature: 0.8
           })
         });
         const data = await res.json();
