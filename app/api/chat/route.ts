@@ -1,69 +1,53 @@
-const rateLimit = new Map<string, {count: number, reset: number}>();
-function getIP(req: Request) {
-  return req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
-}
+"use client";
+import { useState, useRef, useEffect } from "react";
+export default function Page() {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{ endRef.current?.scrollIntoView({behavior:"smooth"}) }, [messages]);
 
-// محركات شغالة 100% - ما بيها ملغي
-const ENGINES = [
-  "nousresearch/hermes-3-llama-3.1-405b", // القوي ابو الفلوس - شغال
-  "meta-llama/llama-3.3-70b-instruct:free", // مجاني قوي
-  "google/gemini-2.0-flash-exp:free", // مجاني ممتاز بالعربي
-  "qwen/qwen-2.5-72b-instruct:free" // مجاني ملك العربي
-];
-
-export async function POST(req: Request) {
-  try {
-    const ip = getIP(req);
-    const now = Date.now();
-    const lim = rateLimit.get(ip);
-    if (lim && now < lim.reset && lim.count >= 15) {
-      return Response.json({ reply: "وصلت 15 رسالة، حاول بعد شوية" });
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ar-IQ'; u.rate = 0.9;
+      speechSynthesis.speak(u);
     }
-    if (!lim || now >= lim.reset) rateLimit.set(ip, {count: 0, reset: now + 3600000});
-    rateLimit.get(ip)!.count++;
+  };
 
-    const { messages } = await req.json();
+  const listen = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return alert("متصفحك ما يدعم المايك، استخدم Chrome");
+    const r = new SR(); r.lang='ar-IQ';
+    r.onstart=()=>setIsListening(true);
+    r.onend=()=>setIsListening(false);
+    r.onresult=(e:any)=>setInput(e.results[0][0].transcript);
+    r.start();
+  };
 
-    for (const model of ENGINES) {
-      try {
-        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "HTTP-Referer": "https://titan-10.vercel.app",
-            "X-Title": "Titan 1.0"
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: "system", content: "انت تيتان، مساعد عراقي ذكي، ترد بشكل طبيعي على طبيعة الي يحجي وياك، تحترم القران، كلامك واضح بدون كلمة بيكفيديا." },
-              ...messages
-            ],
-            temperature: 0.6
-          })
-        });
-        const data = await res.json();
-        // اذا الموديل ملغي او خطأ، جرب الي بعده
-        if (data.error) continue;
-        if (data.choices?.[0]?.message?.content) {
-          let reply = data.choices[0].message.content;
-          reply = reply.replace(/بيكفيديا|بكيفيدا/gi, "");
-          return Response.json({ reply });
-        }
-      } catch {}
-    }
+  const send = async () => {
+    if (!input.trim()) return;
+    const user = {role:"user", content:input};
+    setMessages([...messages, user]); const txt=input; setInput("");
+    const res = await fetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({messages:[...messages, user]})});
+    const data = await res.json();
+    const bot = {role:"assistant", content:data.reply};
+    setMessages(prev=>[...prev, bot]); speak(data.reply);
+  };
 
-    // اخر حل مجاني بدون مفتاح
-    const fb = await fetch("https://text.pollinations.ai/openai", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "llama", messages })
-    });
-    const fbData = await fb.json();
-    return Response.json({ reply: fbData.choices?.[0]?.message?.content || "جرب مرة ثانية" });
-
-  } catch (e: any) {
-    return Response.json({ reply: "خطأ: " + e.message });
-  }
+  return (
+    <main style={{maxWidth:700, margin:"0 auto", padding:20}}>
+      <h1 style={{textAlign:"center"}}>تيتان - Titan 2.0 🤖🎤</h1>
+      <div style={{border:"1px solid #ddd", borderRadius:12, height:420, overflowY:"auto", padding:15, background:"#fafafa", marginBottom:12}}>
+        {messages.map((m,i)=><div key={i} style={{marginBottom:12, textAlign: m.role==="user"?"right":"left"}}><b>{m.role==="user"?"انت:":"تيتان:"}</b> {m.content}</div>)}
+        <div ref={endRef}/>
+      </div>
+      <div style={{display:"flex", gap:8}}>
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="اكتب او احجي..." style={{flex:1, padding:12, borderRadius:8, border:"1px solid #ccc"}}/>
+        <button onClick={listen} style={{padding:12, borderRadius:8, background: isListening?"red":"#eee"}}>{isListening?"🔴":"🎤"}</button>
+        <button onClick={send} style={{padding:"12px 20px", borderRadius:8, background:"black", color:"white"}}>ارسال</button>
+      </div>
+      <p style={{textAlign:"center", fontSize:11, color:"#888", marginTop:10}}>اضغط 🎤 واحجي، تيتان يرد عليك صوت!</p>
+    </main>
+  );
 }
