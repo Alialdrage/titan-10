@@ -1,11 +1,17 @@
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
+    
+    // كلنا جميعا - كل المحركات بتايتن
     const engines = [
-      "nousresearch/hermes-3-llama-3.1-405b",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "google/gemini-2.0-flash-exp:free"
+      "nousresearch/hermes-3-llama-3.1-405b", // 1- القوي 405B ابو الفلوس
+      "google/gemini-2.0-flash-exp:free", // 2- ملك العربي مجاني
+      "qwen/qwen-2.5-72b-instruct:free", // 3- قوي عربي 72B مجاني
+      "meta-llama/llama-3.3-70b-instruct:free", // 4- قوي 70B مجاني
+      "deepseek/deepseek-chat:free", // 5- ملك البرمجة مجاني
+      "nousresearch/hermes-2-pro-llama-3-8b:free" // 6- هرمس صغير مجاني
     ];
+
     for (const model of engines) {
       try {
         const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -17,7 +23,7 @@ export async function POST(req: Request) {
           body: JSON.stringify({
             model: model,
             messages: [
-              { role: "system", content: "You are Titan, a friendly Iraqi assistant." },
+              { role: "system", content: "You are Titan, friendly assistant. Reply naturally matching user language." },
               ...messages
             ]
           })
