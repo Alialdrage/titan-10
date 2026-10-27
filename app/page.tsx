@@ -1,58 +1,35 @@
-import { NextRequest, NextResponse } from "next/server";
-
-const MODELS = [
-  "nousresearch/hermes-3-llama-3.1-405b",
-  "google/gemini-2.0-flash-exp:free",
-  "qwen/qwen-2.5-72b-instruct:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
-];
-
-export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for") || "unknown";
-  const { messages } = await req.json();
-  
-  const lastMessage = messages[messages.length-1]?.content || "";
-  if (!lastMessage.trim()) {
-    return NextResponse.json({reply:"هلا حبيبي، شتريد؟"});
-  }
-
-  for (const model of MODELS) {
-    try {
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method:"POST",
-        headers:{
-          "Authorization":`Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "Content-Type":"application/json",
-          "HTTP-Referer":"https://titan-10.vercel.app",
-        },
-        body: JSON.stringify({
-          model,
-          messages:[
-            {
-              role:"system", 
-              content:`انت تيتان - ذكاء اصطناعي عراقي ذكي ومتعلم.
-قواعد مهمة:
-1. جاوب بذكاء وشرح مفصل ومفيد
-2. اذا سألك بالعراقي جاوب عراقي، اذا فصحى جاوب فصحى، اذا انكليزي جاوب انكليزي
-3. لا تكرر نفسك ولا تتوقف بنص الجواب - كمل الجواب للاخير
-4. لا تكتب "بيكفيديا" او "بكيفيدا" ابدا
-5. انت تيتان من تطوير عدنان، مو ChatGPT`
-            },
-            ...messages
-          ],
-          temperature: 0.7,
-          max_tokens: 1500,
-        })
-      });
-      
-      const data = await res.json();
-      if (data.choices?.[0]?.message?.content) {
-        let reply = data.choices[0].message.content;
-        reply = reply.replace(/بيكفيديا|بكيفيدا|بكي فيديا/gi, "تيتان");
-        return NextResponse.json({reply});
-      }
-    } catch {}
-  }
-  
-  return NextResponse.json({reply:"حبيبي صار ضغط على المحركات، حاول مرة ثانية"});
+"use client";
+import { useState, useRef, useEffect } from "react";
+export default function Page() {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(()=>{ endRef.current?.scrollIntoView({behavior:"smooth"}) }, [messages]);
+  const send = async (txt: string) => {
+    if (!txt.trim()) return;
+    setInput(""); setMessages(m=>[...m, {role:"user", content:txt}]); setLoading(true);
+    const res = await fetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({messages:[...messages, {role:"user", content:txt}]})});
+    const data = await res.json();
+    setMessages(m=>[...m, {role:"assistant", content:data.reply}]); setLoading(false);
+  };
+  const voice = () => {
+    const SR = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    const r = new SR(); r.lang='ar-SA'; r.onresult=(e:any)=> send(e.results[0][0].transcript); r.start();
+  };
+  return (
+    <main style={{maxWidth:700, margin:"0 auto", padding:15, height:"100vh", display:"flex", flexDirection:"column"}}>
+      <h1 style={{textAlign:"center"}}>تيتان 1.0</h1>
+      <div style={{flex:1, border:"1px solid #ddd", borderRadius:12, padding:12, overflowY:"auto", background:"#fafafa"}}>
+        {messages.map((m,i)=><div key={i} style={{margin:8, padding:10, borderRadius:10, background: m.role==="user" ? "#007aff" : "#eee", color: m.role==="user" ? "#fff" : "#000", textAlign:"right"}}>{m.content}</div>)}
+        {loading && <div>يكتب...</div>}
+        <div ref={endRef}/>
+      </div>
+      <div style={{display:"flex", gap:8, marginTop:10}}>
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=> e.key==="Enter" && send(input)} placeholder="اكتب..." style={{flex:1, padding:12, borderRadius:25, border:"1px solid #ccc"}} />
+        <button onClick={()=>send(input)} style={{width:48, height:48, borderRadius:"50%", border:"none", background:"#007aff", color:"#fff"}}>↑</button>
+        <button onClick={voice} style={{width:48, height:48, borderRadius:"50%", border:"none", background:"#34c759", color:"#fff"}}>🎤</button>
+      </div>
+    </main>
+  );
 }
