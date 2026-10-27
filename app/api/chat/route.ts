@@ -1,114 +1,69 @@
-"use client";
-import { useState, useEffect, useRef } from "react";
+const rateLimit = new Map<string, {count: number, reset: number}>();
+function getIP(req: Request) {
+  return req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
+}
 
-export default function Page() {
-  const [messages, setMessages] = useState<{role:string, content:string}[]>([]);
-  const [input, setInput] = useState("");
-  const [memory, setMemory] = useState<string>("");
-  const [isListening, setIsListening] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+// محركات شغالة 100% - ما بيها ملغي
+const ENGINES = [
+  "nousresearch/hermes-3-llama-3.1-405b", // القوي ابو الفلوس - شغال
+  "meta-llama/llama-3.3-70b-instruct:free", // مجاني قوي
+  "google/gemini-2.0-flash-exp:free", // مجاني ممتاز بالعربي
+  "qwen/qwen-2.5-72b-instruct:free" // مجاني ملك العربي
+];
 
-  useEffect(() => {
-    const saved = localStorage.getItem("titan_memory");
-    if (saved) setMemory(saved);
-  }, []);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const speak = (text: string) => {
-    if ('speechSynthesis' in window) {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'ar-IQ';
-      utter.rate = 0.9;
-      speechSynthesis.speak(utter);
+export async function POST(req: Request) {
+  try {
+    const ip = getIP(req);
+    const now = Date.now();
+    const lim = rateLimit.get(ip);
+    if (lim && now < lim.reset && lim.count >= 15) {
+      return Response.json({ reply: "وصلت 15 رسالة، حاول بعد شوية" });
     }
-  };
+    if (!lim || now >= lim.reset) rateLimit.set(ip, {count: 0, reset: now + 3600000});
+    rateLimit.get(ip)!.count++;
 
-  const startListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("المتصفح ما يدعم الصوت");
-    const recog = new SpeechRecognition();
-    recog.lang = 'ar-IQ';
-    recog.onstart = () => setIsListening(true);
-    recog.onend = () => setIsListening(false);
-    recog.onresult = (e: any) => {
-      setInput(e.results[0][0].transcript);
-    };
-    recog.start();
-  };
+    const { messages } = await req.json();
 
-  const learn = (text: string) => {
-    if (text.includes("تذكر") || text.includes("احفظ")) {
-      const newMem = memory + "\n" + text;
-      setMemory(newMem);
-      localStorage.setItem("titan_memory", newMem);
-      return true;
-    }
-    return false;
-  };
-
-  const send = async () => {
-    if (!input.trim()) return;
-    const userMsg = { role: "user", content: input };
-    
-    if (learn(input)) {
-      setMessages([...messages, userMsg, { role: "assistant", content: "تم! حفظت المعلومة وراح اتذكرها بعدين ✅" }]);
-      setInput("");
-      return;
+    for (const model of ENGINES) {
+      try {
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            "HTTP-Referer": "https://titan-10.vercel.app",
+            "X-Title": "Titan 1.0"
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: "system", content: "انت تيتان، مساعد عراقي ذكي، ترد بشكل طبيعي على طبيعة الي يحجي وياك، تحترم القران، كلامك واضح بدون كلمة بيكفيديا." },
+              ...messages
+            ],
+            temperature: 0.6
+          })
+        });
+        const data = await res.json();
+        // اذا الموديل ملغي او خطأ، جرب الي بعده
+        if (data.error) continue;
+        if (data.choices?.[0]?.message?.content) {
+          let reply = data.choices[0].message.content;
+          reply = reply.replace(/بيكفيديا|بكيفيدا/gi, "");
+          return Response.json({ reply });
+        }
+      } catch {}
     }
 
-    setMessages([...messages, userMsg]);
-    const currentInput = input;
-    setInput("");
-
-    const res = await fetch("/api/chat", {
+    // اخر حل مجاني بدون مفتاح
+    const fb = await fetch("https://text.pollinations.ai/openai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        messages: [...messages, userMsg, ...(memory ? [{role: "system", content: `معلومات تتذكرها عن المستخدم: ${memory}`}] : [])] 
-      })
+      body: JSON.stringify({ model: "llama", messages })
     });
-    const data = await res.json();
-    const botMsg = { role: "assistant", content: data.reply };
-    setMessages(prev => [...prev, botMsg]);
-    speak(data.reply);
-  };
+    const fbData = await fb.json();
+    return Response.json({ reply: fbData.choices?.[0]?.message?.content || "جرب مرة ثانية" });
 
-  return (
-    <main style={{maxWidth: 700, margin: "0 auto", padding: 20, fontFamily: "sans-serif"}}>
-      <h1 style={{textAlign: "center"}}>تيتان - Titan 2.0 🤖🎤</h1>
-      <p style={{textAlign: "center", fontSize: 12, color: "#666"}}>{memory ? `يتذكر: ${memory.slice(0,50)}...` : "يكدر يتعلم! كله تذكر اني..."}</p>
-      
-      <div style={{border: "1px solid #ddd", borderRadius: 12, height: 400, overflowY: "auto", padding: 15, marginBottom: 15, background: "#fafafa"}}>
-        {messages.map((m, i) => (
-          <div key={i} style={{marginBottom: 12, textAlign: m.role==="user" ? "right" : "left"}}>
-            <b>{m.role==="user" ? "انت:" : "تيتان:"}</b> {m.content}
-          </div>
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-
-      <div style={{display: "flex", gap: 8}}>
-        <input 
-          value={input} 
-          onChange={e=>setInput(e.target.value)}
-          onKeyDown={e=>e.key==="Enter" && send()}
-          placeholder="اكتب رسالتك... او كول تذكر اني احب..."
-          style={{flex: 1, padding: 12, borderRadius: 8, border: "1px solid #ccc"}}
-        />
-        <button onClick={startListening} style={{padding: "12px", borderRadius: 8, border: "1px solid #ccc", background: isListening ? "red" : "#eee"}}>
-          {isListening ? "🔴" : "🎤"}
-        </button>
-        <button onClick={send} style={{padding: "12px 20px", borderRadius: 8, background: "black", color: "white", border: "none"}}>
-          ارسال
-        </button>
-      </div>
-      
-      <div style={{marginTop: 15, fontSize: 12, color: "#888", textAlign: "center"}}>
-        💡 جرب: "تذكر اني اسمع قران" - "احجي بصوت" - اضغط 🎤 واحجي
-      </div>
-    </main>
-  );
+  } catch (e: any) {
+    return Response.json({ reply: "خطأ: " + e.message });
+  }
 }
