@@ -6,53 +6,26 @@ export async function POST(req: Request) {
     const key = process.env.OPENROUTER_API_KEY;
     
     if (!key) {
-      return NextResponse.json({ error: "مفتاح OpenRouter غير موجود." }, { status: 500 });
+      return NextResponse.json({ reply: "خطأ: مفتاح OpenRouter غير موجود في متغيرات البيئة." }, { status: 500 });
     }
 
     const raw = messages[messages.length - 1]?.content || "";
     const t = raw.toLowerCase().replace(/ة/g, "ه");
 
-    // التحقق من طلبات الصور وتوليدها كـ JSON مباشر
+    // 1. إذا كان طلب صورة، نولد رابط Pollinations مباشرة بدون ترجمة معقدة تتأخر
     if (t.includes("صوره") || t.includes("ارسم") || t.includes("صمم") || t.includes("لوجو") || t.includes("ولد") || t.includes("image")) {
-      
-      const translateRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-        body: JSON.stringify({
-          model: "meta-llama/llama-3.3-70b-instruct",
-          messages: [
-            { 
-              role: "system", 
-              content: "You are an expert prompt engineer. Translate the user's image request into a detailed, high-quality English image prompt. Output ONLY the English prompt, nothing else." 
-            },
-            { role: "user", content: raw }
-          ],
-          max_tokens: 100
-        })
-      });
-
-      const translateData = await translateRes.json();
-      const englishPrompt = translateData.choices?.[0]?.message?.content?.trim() || raw;
-      
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(englishPrompt)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
-      
-      // إرسال استجابة JSON خاصة بالصورة مع الهيدر الصحيح
-      return NextResponse.json({ 
-        type: "image", 
-        url: url 
-      });
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(raw)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
+      return NextResponse.json({ reply: `__IMAGE__${url}__` });
     }
 
     const now = new Date().toLocaleString("ar-IQ", { timeZone: "Asia/Baghdad" });
 
-    // الردود النصية عبر الـ Stream
+    // 2. الطلبات النصية العادية (بدون Streaming لتجنب مشاكل الواجهة)
     const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { 
         "Content-Type": "application/json", 
-        "Authorization": `Bearer ${key}`,
-        "HTTP-Referer": "https://alialdrage.vercel.app", // استبدل بـ رابط موقعك على فيرستل
-        "X-Title": "Titan AI"
+        "Authorization": `Bearer ${key}` 
       },
       body: JSON.stringify({
         model: "meta-llama/llama-3.3-70b-instruct",
@@ -63,28 +36,23 @@ export async function POST(req: Request) {
           },
           ...messages
         ],
-        max_tokens: 1800,
+        max_tokens: 1500,
         temperature: 0.3,
-        repetition_penalty: 1.4,
-        stream: true
+        repetition_penalty: 1.4
       })
     });
 
-    if (!r.ok) {
-      const errorData = await r.text();
-      return NextResponse.json({ error: `خطأ من الخادم الخارجي: ${errorData}` }, { status: r.status });
+    const d = await r.json();
+    
+    if (d.error) {
+      return NextResponse.json({ reply: `خطأ من OpenRouter: ${d.error.message || 'غير معروف'}` });
     }
 
-    return new Response(r.body, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive"
-      }
-    });
+    const replyText = d.choices?.[0]?.message?.content || "ما قدرت أفتهم الطلب، عذراً!";
+    return NextResponse.json({ reply: replyText });
 
-  } catch (error) {
+  } async (error) {
     console.error("API Error:", error);
-    return NextResponse.json({ error: "حدث خطأ غير متوقع." }, { status: 500 });
+    return NextResponse.json({ reply: "حدث خطأ غير متوقع بالسيرفر." }, { status: 500 });
   }
 }
