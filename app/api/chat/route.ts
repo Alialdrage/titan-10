@@ -12,9 +12,32 @@ export async function POST(req: Request) {
     const raw = messages[messages.length - 1]?.content || "";
     const t = raw.toLowerCase().replace(/ة/g, "ه");
 
-    // 1. معالجة طلبات توليد الصور ضمن الكود وإرجاعها مباشرة كـ JSON
-    if (t.includes("صوره") || t.includes("ارسم") || t.includes("صمم") || t.includes("لوجو") || t.includes("ولد")) {
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(raw)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
+    // التحقق إذا كان الطلب يتضمن توليد صورة
+    if (t.includes("صوره") || t.includes("ارسم") || t.includes("صمم") || t.includes("لوجو") || t.includes("ولد") || t.includes("image")) {
+      
+      // نطلب من نموذج Llama ترجمة ووصف الصورة باللغة الإنجليزية حتى تفهمها خدمة Pollinations وتتجنب الخطأ
+      const translateRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+        body: JSON.stringify({
+          model: "meta-llama/llama-3.3-70b-instruct",
+          messages: [
+            { 
+              role: "system", 
+              content: "You are an expert prompt engineer. Translate the user's image request into a detailed, high-quality English image prompt. Output ONLY the English prompt, nothing else, no quotes, no conversational text." 
+            },
+            { role: "user", content: raw }
+          ],
+          max_tokens: 100
+        })
+      });
+
+      const translateData = await translateRes.json();
+      const englishPrompt = translateData.choices?.[0]?.message?.content?.trim() || raw;
+      
+      // توليد رابط الصورة بالوصف الإنجليزي الصحيح
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(englishPrompt)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
+      
       return NextResponse.json({ 
         type: "image", 
         reply: `__IMAGE__${url}__`,
@@ -24,7 +47,7 @@ export async function POST(req: Request) {
 
     const now = new Date().toLocaleString("ar-IQ", { timeZone: "Asia/Baghdad" });
 
-    // 2. معالجة الردود النصية عبر OpenRouter وتفعيل الـ Stream
+    // معالجة الردود النصية العادية عبر OpenRouter وتفعيل الـ Stream
     const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: { 
@@ -54,7 +77,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `خطأ من الخادم الخارجي: ${errorData}` }, { status: r.status });
     }
 
-    // إرجاع الـ Stream للنص
     return new Response(r.body, {
       headers: {
         "Content-Type": "text/event-stream",
