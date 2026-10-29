@@ -32,24 +32,12 @@ export default function Page() {
   };
 
   return (
-    <main style={{ maxWidth: 700, margin: "0 auto", padding: 12, height: "100vh", display: "flex", flexDirection: "column", background: "#fff" }}>
-      <h2 style={{ textAlign: "center" }}>تيتان هيرميس ✅ عام</h2>
-      <div style={{ flex: 1, border: "1px solid #eee", overflowY: "auto", padding: 10, borderRadius: 12, background: "#fafafa" }}>
-        {messages.map((m: any, i: number) => {
-          const isImage = m.content?.includes("__IMAGE__");
-          const imgUrl = isImage ? m.content.replace("__IMAGE__", "").replace(/__/g, "").trim() : "";
-          return (
-            <div key={i} style={{ margin: "8px 0", display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-              <div style={{ maxWidth: "80%", padding: "10px 12px", borderRadius: 16, background: m.role === "user" ? "#0b93ff" : "#fff", color: m.role === "user" ? "#fff" : "#000", border: "1px solid #eee", textAlign: "right", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                {isImage ? (
-                  <img src={imgUrl} alt="generated" style={{ width: "100%", borderRadius: 12 }} />
-                ) : (
-                  m.content
-                )}
-              </div>
-            </div>
-          );
-        })}
+    <img src={url} style={{width:"100%",borderRadius:12}} alt="" 
+  onError={(e:any)=>{
+    e.target.src=`https://picsum.photos/seed/${Date.now()}/1024/1024`;
+    e.target.onerror=null;
+  }} 
+/>
         {loading && <div style={{ fontSize: 12, color: "#888" }}>يكتب...</div>}
         <div ref={endRef} />
       </div>
