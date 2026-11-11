@@ -129,11 +129,9 @@ export async function POST(req: Request) {
     return Response.json({ reply: `__IMAGE__${url}__` });
   }
 
-  // مسار الفيديو الحالي محفوظ للتوافق؛ يلزم ربط مزود فيديو فعلي والتحقق منه لاحقاً.
+  // لا ندّعي توليد الفيديو قبل ربط مزود فيديو فعلي.
   if (normalizedText.includes("فيديو") || normalizedText.includes("video")) {
-    const prompt = encodeURIComponent(latestMessage);
-    const url = `https://image.pollinations.ai/prompt/${prompt}?width=512&height=512&model=video&nologo=true&seed=${Date.now()}`;
-    return Response.json({ reply: `__VIDEO__${url}__` });
+    return jsonError("توليد الفيديو غير متاح حالياً؛ لم يتم ربط مزود فيديو فعلي بعد.", 501);
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY;
