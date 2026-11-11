@@ -55,7 +55,20 @@ function parseMessages(value: unknown): ChatMessage[] | null {
   }
 
   if (messages[messages.length - 1]?.role !== "user") return null;
+  for (let index = 1; index < messages.length; index += 1) {
+    if (messages[index].role === messages[index - 1].role) return null;
+  }
+
   return messages;
+}
+
+function isImageRequest(text: string): boolean {
+  const normalized = text.toLowerCase().replace(/ة/g, "ه").trim();
+  return [
+    /(?:ولد|انشئ|أنشئ|اصنع|سوي|ارسم|صمم)\s+(?:لي\s+)?(?:صوره|صورة|image|picture)/i,
+    /(?:صوره|صورة|image|picture)\s+(?:لي|عن|لـ|of|about)?/i,
+    /\b(?:generate|create|draw|design)\s+(?:an?\s+)?(?:image|picture|illustration)\b/i,
+  ].some((pattern) => pattern.test(normalized));
 }
 
 export async function POST(req: Request) {
@@ -75,37 +88,28 @@ export async function POST(req: Request) {
     return jsonError("رسائل المحادثة غير صالحة أو تتجاوز الحدود المسموحة.", 400);
   }
 
-  const access = await authorizeAiRequest(req, "chat", CHAT_LIMITS);
-  if (!access.ok) return access.response;
-
   const latestMessage = messages[messages.length - 1].content;
   const normalizedText = latestMessage.toLowerCase().replace(/ة/g, "ه");
-
-  if (normalizedText.includes("رابط فيرسل") || normalizedText.includes("vercel")) {
-    return Response.json({
-      reply: "رابط تيتان:\nhttps://alialdrage.vercel.app",
-    });
-  }
-
-  if (
-    ["صوره", "ارسم", "صمم", "كوره", "ولد", "احمر"].some((word) =>
-      normalizedText.includes(word),
-    )
-  ) {
-    const prompt = encodeURIComponent(
-      latestMessage + " high quality, 4k, detailed",
-    );
-    const url = `https://image.pollinations.ai/prompt/${prompt}?width=1024&height=1024&model=flux&nologo=true&seed=${Date.now()}`;
-    return Response.json({ reply: `__IMAGE__${url}__` });
-  }
 
   if (normalizedText.includes("فيديو") || normalizedText.includes("video")) {
     return jsonError("توليد الفيديو غير متاح حالياً؛ لم يتم ربط مزود فيديو فعلي بعد.", 501);
   }
 
+  const isImage = isImageRequest(latestMessage);
   const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
+  if (!isImage && !apiKey) {
     return jsonError("خدمة المحادثة غير مهيأة حالياً. تحقق من إعداد OPENROUTER_API_KEY.", 503);
+  }
+
+  const access = await authorizeAiRequest(req, "chat", CHAT_LIMITS);
+  if (!access.ok) return access.response;
+
+  if (isImage) {
+    const prompt = encodeURIComponent(
+      latestMessage + " high quality, 4k, detailed",
+    );
+    const url = `https://image.pollinations.ai/prompt/${prompt}?width=1024&height=1024&model=flux&nologo=true&seed=${Date.now()}`;
+    return Response.json({ reply: `__IMAGE__${url}__` });
   }
 
   const now = new Date().toLocaleString("ar-IQ", {
@@ -163,6 +167,9 @@ export async function POST(req: Request) {
 
     if (typeof reply !== "string" || reply.trim().length === 0) {
       return jsonError("لم تُرجع خدمة الذكاء الاصطناعي إجابة.", 502);
+    }
+    if (reply.length > 20_000) {
+      return jsonError("تجاوز رد خدمة الذكاء الاصطناعي الحد المسموح.", 502);
     }
 
     return Response.json({ reply: reply.trim() });

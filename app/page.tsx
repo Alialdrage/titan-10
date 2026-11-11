@@ -29,7 +29,7 @@ function getImageUrl(content: string): string | null {
   const value = content.slice("__IMAGE__".length).replace(/__$/, "").trim();
   try {
     const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+    return url.protocol === "https:" && url.hostname === "image.pollinations.ai" ? url.toString() : null;
   } catch {
     return null;
   }

@@ -23,10 +23,10 @@ def require_service_token(
     authorization: Annotated[str | None, Header()] = None,
 ) -> None:
     expected = os.getenv("CREW_API_TOKEN")
-    if not expected:
+    if not expected or len(expected) < 32:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Crew service authentication is not configured.",
+            detail="Crew service authentication is not securely configured.",
         )
 
     scheme, _, supplied = (authorization or "").partition(" ")

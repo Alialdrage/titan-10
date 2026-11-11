@@ -5,7 +5,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@upstash/redis": "^1.35.6",
@@ -16,10 +17,11 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
     "@types/node": "^20.0.0",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.5.0"
   },
   "engines": {
     "node": ">=20.9.0"

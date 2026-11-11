@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - fix/phase-1-foundation
+      - feat/ai-model-hub-phase-0
     paths:
       - "services/crew/**"
       - "app/api/crew/**"

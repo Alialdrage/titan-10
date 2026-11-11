@@ -7,13 +7,13 @@ Phase 0 adds server-side Firebase ID-token verification and shared Redis quotas.
 1. Create or select a Firebase project.
 2. Enable **Authentication → Sign-in method → Email/Password**.
 3. Register a Firebase Web App and configure the four `NEXT_PUBLIC_FIREBASE_*` variables from its web configuration.
-4. Set `FIREBASE_PROJECT_ID` to the same Firebase project ID on the server.
-5. Create an Upstash Redis database and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` as server-side environment variables.
+4. Set both `FIREBASE_PROJECT_ID` and `NEXT_PUBLIC_FIREBASE_PROJECT_ID` to the exact same Firebase project ID.
+5. Create an Upstash Redis database and set `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` as server-side environment variables. The REST URL must use HTTPS.
 6. Keep `OPENROUTER_API_KEY` server-side. Never use a `NEXT_PUBLIC_` prefix for provider or Redis secrets.
 
 ## Environment variables
 
-Copy the variable names from `.env.example` into the hosting environment. Do not commit real values. Configure the public Firebase Web App values for the client and Firebase project ID plus Upstash credentials for the server.
+Copy the variable names from `.env.example` into the hosting environment. Configure public Firebase Web App values for the client and Firebase project ID plus Upstash credentials for the server. Never commit actual values.
 
 ## Enforced controls
 
@@ -21,14 +21,18 @@ Copy the variable names from `.env.example` into the hosting environment. Do not
 | --- | --- | --- |
 | `POST /api/chat` | Firebase ID token | 30/minute, 200/day per user |
 | `POST /api/crew` | Firebase ID token + service flag | 1/minute, 3/day per user |
+| `POST /api/search` | Disabled (no provider configured) | 8 KiB request body |
 
-- Request bodies are streamed and capped before JSON parsing (32 KiB chat, 8 KiB Crew).
-- Only validated chat roles (`user`, `assistant`) are forwarded; the system prompt remains server-owned.
-- Firebase ID tokens are verified against Google's published Secure Token signing keys, issuer, audience, and RS256 algorithm.
-- Redis increments use an atomic Lua script and expire automatically.
-- Redis outages or missing Redis configuration return HTTP 503. They never fall back to process-local counters.
-- No monetary spend ledger exists yet. The per-user daily request quotas are a hard request-count guardrail, not a dollar-denominated cost ceiling. Provider-specific cost accounting remains a later phase.
-- Crew remains disabled unless `CREW_API_ENABLED=true` is set after the service and environment are ready.
+- JSON endpoints require `Content-Type: application/json`; bodies are streamed and capped before JSON parsing (32 KiB chat, 8 KiB Crew/search).
+- Chat messages accept only `user` and `assistant` roles, alternate roles, and end with a user message. The system prompt remains server-owned.
+- Firebase ID tokens are verified against Google's published Secure Token signing keys, issuer, audience, RS256 algorithm, and required Firebase token claims.
+- Server and public Firebase project IDs must match exactly.
+- Redis checks and increments both quota windows atomically. Rejected requests do not consume additional quota.
+- Redis outages or missing/malformed Redis configuration return HTTP 503. They never fall back to process-local counters.
+- The daily quota resets at 00:00 UTC. The minute quota uses a fixed 60-second window from first use.
+- No monetary spend ledger exists yet. Per-user request quotas are guardrails, not a dollar-denominated cost ceiling. Provider-specific cost accounting remains required before paid model routing.
+- Crew remains disabled unless `CREW_API_ENABLED=true` is set after its service, credentials, preview auth, quotas, and cost controls are verified.
+- Image prompts are sent to Pollinations over HTTPS. Do not send confidential or personal information in image prompts.
 
 ## Local validation
 
@@ -38,11 +42,6 @@ npm run typecheck
 npm run build
 ```
 
-## Important deployment note
+## Preview validation before enabling paid services
 
-After configuring Firebase and Upstash, redeploy the branch preview and test sign-up, sign-in, authenticated chat, invalid/expired tokens, quota exhaustion, missing Redis configuration, and Crew's disabled-by-default behavior. Do not enable Crew or any paid provider until those checks pass.
-
-
-## Framework security baseline
-
-The dependency baseline is Next.js 16.4.1 with React and React DOM 19.3.0. This is intentionally newer than the original 16.0.7 / 19.0.0 project baseline. Next.js published its October 14, 2026 security update with fixes in 16.4.1; do not downgrade below that patched release without a new security review.
+After configuring Firebase and Upstash, redeploy the branch preview and test sign-up, sign-in, valid/invalid/expired tokens, quota exhaustion, missing Redis configuration, oversized and invalid-UTF8 bodies, and Crew's disabled-by-default behavior. Do not enable Crew or any paid provider until those checks pass.
