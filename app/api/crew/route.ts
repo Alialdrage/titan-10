@@ -48,6 +48,11 @@ function isRateLimited(request: Request): { limited: boolean; retryAfter: number
 }
 
 export async function POST(request: Request) {
+  // Fail closed until application-level caller authentication is integrated.
+  if (process.env.CREW_API_ENABLED !== "true") {
+    return errorResponse("خدمة الوكلاء معطّلة حتى تفعيل مصادقة المستخدمين.", 503);
+  }
+
   const limit = isRateLimited(request);
   if (limit.limited) {
     return errorResponse(
