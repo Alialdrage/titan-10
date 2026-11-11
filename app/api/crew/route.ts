@@ -1,96 +1,39 @@
+import { authorizeAiRequest, readJsonBody } from "@/lib/server/security";
+
 export const runtime = "nodejs";
 
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 5;
 const MAX_BODY_BYTES = 8_192;
+const CREW_LIMITS = { perMinute: 1, perDay: 3 };
 
-// Per-instance protection only. Use a shared rate-limit store before scaling
-// this endpoint across multiple serverless instances.
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-let cleanupCounter = 0;
-
-function errorResponse(error: string, status: number, headers?: HeadersInit) {
-  return Response.json({ error }, { status, headers });
-}
-
-function isRateLimited(request: Request): { limited: boolean; retryAfter: number } {
-  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const clientIp = request.headers.get("x-real-ip")?.trim() || forwardedFor || "unknown";
-  const now = Date.now();
-
-  cleanupCounter += 1;
-  if (cleanupCounter % 128 === 0) {
-    for (const [key, entry] of rateLimitStore) {
-      if (entry.resetAt <= now) rateLimitStore.delete(key);
-    }
-  }
-
-  if (rateLimitStore.size > 10_000) {
-    const oldestKey = rateLimitStore.keys().next().value;
-    if (oldestKey) rateLimitStore.delete(oldestKey);
-  }
-
-  const current = rateLimitStore.get(clientIp);
-  if (!current || current.resetAt <= now) {
-    rateLimitStore.set(clientIp, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return { limited: false, retryAfter: 0 };
-  }
-
-  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return {
-      limited: true,
-      retryAfter: Math.max(1, Math.ceil((current.resetAt - now) / 1000)),
-    };
-  }
-
-  current.count += 1;
-  return { limited: false, retryAfter: 0 };
+function errorResponse(error: string, status: number) {
+  return Response.json({ error }, { status });
 }
 
 export async function POST(request: Request) {
-  // Fail closed until application-level caller authentication is integrated.
+  // Keep disabled until Firebase Auth and shared quotas are configured.
   if (process.env.CREW_API_ENABLED !== "true") {
-    return errorResponse("خدمة الوكلاء معطّلة حتى تفعيل مصادقة المستخدمين.", 503);
+    return errorResponse("خدمة الوكلاء معطّلة حتى تهيئة مصادقة المستخدمين والحصص المشتركة.", 503);
   }
 
-  const limit = isRateLimited(request);
-  if (limit.limited) {
-    return errorResponse(
-      "تم تجاوز الحد المؤقت لطلبات الوكلاء. حاول بعد قليل.",
-      429,
-      { "Retry-After": String(limit.retryAfter) },
-    );
-  }
-
-  const contentLength = Number(request.headers.get("content-length") || "0");
-  if (contentLength > MAX_BODY_BYTES) {
-    return errorResponse("حجم الطلب أكبر من المسموح.", 413);
-  }
-
-  let body: unknown;
-  try {
-    const rawBody = await request.text();
-    if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
-      return errorResponse("حجم الطلب أكبر من المسموح.", 413);
-    }
-    body = JSON.parse(rawBody);
-  } catch {
-    return errorResponse("صيغة الطلب غير صحيحة.", 400);
-  }
+  const parsed = await readJsonBody(request, MAX_BODY_BYTES);
+  if (!parsed.ok) return parsed.response;
 
   if (
-    typeof body !== "object" ||
-    body === null ||
-    !("topic" in body) ||
-    typeof (body as { topic: unknown }).topic !== "string"
+    typeof parsed.body !== "object" ||
+    parsed.body === null ||
+    !("topic" in parsed.body) ||
+    typeof (parsed.body as { topic: unknown }).topic !== "string"
   ) {
     return errorResponse("يرجى إرسال موضوع نصي للبحث والتحليل.", 400);
   }
 
-  const topic = (body as { topic: string }).topic.trim();
+  const topic = (parsed.body as { topic: string }).topic.trim();
   if (topic.length < 3 || topic.length > 500) {
     return errorResponse("يجب أن يكون الموضوع بين 3 و500 حرف.", 400);
   }
+
+  const access = await authorizeAiRequest(request, "crew", CREW_LIMITS);
+  if (!access.ok) return access.response;
 
   const serviceUrl = process.env.CREW_SERVICE_URL;
   const serviceToken = process.env.CREW_API_TOKEN;
