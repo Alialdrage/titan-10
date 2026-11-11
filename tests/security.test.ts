@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { readJsonBody, authorizeAiRequest } from "../lib/server/security.ts";
+import { readJsonBody, authorizeAiRequest } from "../lib/server/security";
 
 function jsonRequest(body: string, headers: Record<string, string> = {}) {
   return new Request("https://titan.example/api/test", {

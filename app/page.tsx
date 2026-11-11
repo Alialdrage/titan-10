@@ -54,7 +54,12 @@ export default function Page() {
       return;
     }
     return onAuthStateChanged(firebaseAuth, (currentUser) => {
-      setUser(currentUser);
+      setUser((previousUser) => {
+        if (previousUser?.uid !== currentUser?.uid) {
+          setMessages([INITIAL_MESSAGE]);
+        }
+        return currentUser;
+      });
       setAuthReady(true);
     });
   }, []);
@@ -115,7 +120,7 @@ export default function Page() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ messages: nextMessages.slice(-24) }),
       });
 
       let payload: unknown;
@@ -276,6 +281,7 @@ export default function Page() {
       >
         <input
           value={input}
+          maxLength={4000}
           onChange={(event) => setInput(event.target.value)}
           placeholder="اكتب رسالتك..."
           aria-label="رسالتك"
