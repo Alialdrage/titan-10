@@ -181,9 +181,10 @@ export async function authorizeAiRequest(
 
     const dayCount = await incrementWindow(redis, dayKey, 86_400);
     if (dayCount > limits.perDay) {
+      const nextUtcMidnight = Date.parse(`${day}T00:00:00.000Z`) + 86_400_000;
       const secondsUntilUtcReset = Math.max(
         1,
-        Math.ceil((Date.parse(`${day}T24:00:00.000Z`) - Date.now()) / 1000),
+        Math.ceil((nextUtcMidnight - Date.now()) / 1000),
       );
       return {
         ok: false,
