@@ -1,32 +1,41 @@
 # Titan Crew Service
 
-This is a separate Python service. It is intentionally outside the Next.js App Router.
+This directory contains the standalone Python service used by Titan's CrewAI endpoint.
 
-## Required environment
+## Required environment variables
 
-- `CREW_API_TOKEN`: long random shared secret used only between the Next.js server and this service.
-- `OPENROUTER_API_KEY`: server-side OpenRouter key.
-- `SERPER_API_KEY`: server-side Serper key for real web research.
-- `OPENROUTER_MODEL` (optional): OpenRouter model identifier; defaults to `deepseek/deepseek-chat:free`.
+Set these in the Python service host:
 
-Never commit these values or expose them to browser code.
+- `CREW_API_TOKEN`: a long, random bearer token shared only with the Next.js server.
+- `OPENROUTER_API_KEY`: OpenRouter API key.
+- `SERPER_API_KEY`: Serper search API key.
+- `OPENROUTER_MODEL`: optional model identifier; defaults to `deepseek/deepseek-chat:free`.
 
-## Run
+Set these in the Next.js deployment:
 
-Use Python 3.12 or newer:
+- `CREW_SERVICE_URL`: HTTPS base URL of this Python service.
+- `CREW_API_TOKEN`: the same bearer token configured in the Python service.
 
-```sh
-python -m venv .venv
-. .venv/bin/activate
-pip install -r services/crew/requirements.txt
-uvicorn services.crew.main:app --host 0.0.0.0 --port 8000
+Never commit these values or paste them into source files.
+
+## Run locally
+
+```bash
+python -m pip install -r services/crew/requirements.txt
+uvicorn services.crew.main:app --host 127.0.0.1 --port 8000
 ```
 
-Configure the Next.js deployment with:
+Health check: `GET /health`
 
-- `CREW_SERVICE_URL`: HTTPS base URL of this separately deployed service.
-- `CREW_API_TOKEN`: the same service token configured above.
+Authenticated task endpoint: `POST /crew` with JSON body `{"topic":"..." }` and header `Authorization: Bearer <CREW_API_TOKEN>`.
 
-The Next.js endpoint is `POST /api/crew` with JSON `{"topic":"..." }`. The service endpoint is `POST /crew` and requires a Bearer token.
+The Next.js application proxies requests through `POST /api/crew`. The proxy validates the request, limits the body to 8 KiB, applies a best-effort per-instance limit of five requests per minute per client IP, and uses a 120-second upstream timeout. The in-memory limit is not shared across serverless instances; use a shared rate-limit store and application-user authentication before exposing paid Crew execution broadly.
 
-The service returns HTTP 503 when required provider credentials are missing. No CrewAI task is executed during module import or health checks.
+The Crew task is created and executed only after an authenticated `POST /crew`; importing the module or calling the health endpoint does not start a task.
+
+## Validation
+
+```bash
+python -m py_compile services/crew/main.py
+python -m unittest discover -s services/crew -p 'test_*.py' -v
+```

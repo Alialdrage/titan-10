@@ -3,7 +3,7 @@ import os
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
 app = FastAPI(title="Titan Crew Service", version="1.0.0")
@@ -12,6 +12,11 @@ app = FastAPI(title="Titan Crew Service", version="1.0.0")
 class CrewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     topic: str = Field(min_length=3, max_length=500)
+
+    @field_validator("topic", mode="before")
+    @classmethod
+    def strip_topic(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 def require_service_token(
@@ -118,7 +123,7 @@ async def health() -> dict[str, str]:
 @app.post("/crew", dependencies=[Depends(require_service_token)])
 async def execute_crew(payload: CrewRequest) -> dict[str, str]:
     try:
-        result = await run_in_threadpool(run_crew, payload.topic.strip())
+        result = await run_in_threadpool(run_crew, payload.topic)
     except HTTPException:
         raise
     except Exception:
