@@ -47,6 +47,7 @@ export default function Page() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const previousUidRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!firebaseAuth) {
@@ -54,12 +55,13 @@ export default function Page() {
       return;
     }
     return onAuthStateChanged(firebaseAuth, (currentUser) => {
-      setUser((previousUser) => {
-        if (previousUser?.uid !== currentUser?.uid) {
-          setMessages([INITIAL_MESSAGE]);
-        }
-        return currentUser;
-      });
+      const nextUid = currentUser?.uid ?? null;
+      if (previousUidRef.current !== nextUid) {
+        setMessages([INITIAL_MESSAGE]);
+        setInput("");
+      }
+      previousUidRef.current = nextUid;
+      setUser(currentUser);
       setAuthReady(true);
     });
   }, []);
