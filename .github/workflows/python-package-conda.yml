@@ -1,23 +1,38 @@
-name: Python syntax validation
+name: Crew service validation
 
 on:
   push:
+    branches:
+      - main
+      - fix/phase-1-foundation
     paths:
-      - "app/api/crew/route.py"
+      - "services/crew/**"
+      - "app/api/crew/**"
       - ".github/workflows/python-package-conda.yml"
   pull_request:
+    branches:
+      - main
     paths:
-      - "app/api/crew/route.py"
+      - "services/crew/**"
+      - "app/api/crew/**"
       - ".github/workflows/python-package-conda.yml"
 
 jobs:
-  python-syntax:
+  crew-service:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Compile Python source
-        run: python -m py_compile app/api/crew/route.py
+
+      - name: Install Crew service dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r services/crew/requirements.txt
+
+      - name: Compile Crew service
+        run: python -m py_compile services/crew/main.py
