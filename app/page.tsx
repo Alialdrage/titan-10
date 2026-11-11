@@ -228,7 +228,7 @@ export default function Page() {
         <h2>تيتان 1.0</h2>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <small>{user.email}</small>
-          <button type="button" onClick={() => void signOut(firebaseAuth)} style={{ padding: "7px 10px" }}>خروج</button>
+          <button type="button" onClick={() => { if (firebaseAuth) void signOut(firebaseAuth); }} style={{ padding: "7px 10px" }}>خروج</button>
         </div>
       </header>
 

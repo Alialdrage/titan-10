@@ -41,3 +41,8 @@ npm run build
 ## Important deployment note
 
 After configuring Firebase and Upstash, redeploy the branch preview and test sign-up, sign-in, authenticated chat, invalid/expired tokens, quota exhaustion, missing Redis configuration, and Crew's disabled-by-default behavior. Do not enable Crew or any paid provider until those checks pass.
+
+
+## Framework security baseline
+
+The dependency baseline is Next.js 16.4.1 with React and React DOM 19.3.0. This is intentionally newer than the original 16.0.7 / 19.0.0 project baseline. Next.js published its October 14, 2026 security update with fixes in 16.4.1; do not downgrade below that patched release without a new security review.

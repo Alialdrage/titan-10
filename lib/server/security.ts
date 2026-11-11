@@ -138,12 +138,13 @@ async function incrementWindow(
   key: string,
   windowSeconds: number,
 ): Promise<number> {
-  const result = await redis.eval<number>(
+  const result = await redis.eval(
     RATE_LIMIT_SCRIPT,
     [key],
     [String(windowSeconds)],
   );
-  return Number(result);
+  const count = Array.isArray(result) ? result[0] : result;
+  return Number(count);
 }
 
 export async function authorizeAiRequest(
@@ -198,7 +199,6 @@ export async function authorizeAiRequest(
 
     return { ok: true, uid: auth.uid };
   } catch {
-    // Fail closed: never fall back to per-instance limits for billable AI routes.
     return {
       ok: false,
       response: errorResponse("تعذر التحقق من حصة الاستخدام؛ أُوقف الطلب لحماية الحساب.", 503),
